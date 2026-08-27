@@ -1,12 +1,14 @@
+import platform
+import subprocess
 from pathlib import Path
-from typing import Iterable, Mapping
+from typing import Iterable, Mapping, Tuple
 
 
 def export_transactions_excel(rows: Iterable[Mapping], output_path: str) -> str:
     try:
         from openpyxl import Workbook
     except ImportError:
-        return export_transactions_csv(rows, output_path.replace('.xlsx', '.csv'))
+        return export_transactions_csv(rows, output_path.replace(".xlsx", ".csv"))
 
     workbook = Workbook()
     sheet = workbook.active
@@ -81,3 +83,43 @@ def save_receipt(customer_name: str, txn_row: Mapping, output_dir: str = "receip
     content = generate_receipt_text(customer_name, txn_row)
     out_path.write_text(content, encoding="utf-8")
     return str(out_path)
+
+
+def save_receipt_pdf(customer_name: str, txn_row: Mapping, output_dir: str = "receipts") -> str:
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    safe_name = customer_name.replace(" ", "_")
+    out_path = Path(output_dir) / f"receipt_{safe_name}_{txn_row['id']}.pdf"
+
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfgen import canvas
+    except ImportError:
+        return save_receipt(customer_name, txn_row, output_dir)
+
+    c = canvas.Canvas(str(out_path), pagesize=A4)
+    text = c.beginText(40, 800)
+    for line in generate_receipt_text(customer_name, txn_row).split("\n"):
+        text.textLine(line)
+    c.drawText(text)
+    c.save()
+    return str(out_path)
+
+
+def print_receipt_file(path: str) -> Tuple[bool, str]:
+    file_path = Path(path)
+    if not file_path.exists():
+        return False, "Receipt file not found"
+
+    system = platform.system().lower()
+    try:
+        if system.startswith("win"):
+            import os
+
+            os.startfile(str(file_path), "print")
+        elif system == "darwin":
+            subprocess.run(["lp", str(file_path)], check=True)
+        else:
+            subprocess.run(["lp", str(file_path)], check=True)
+        return True, "Print job sent"
+    except Exception as exc:
+        return False, f"Print failed: {exc}"

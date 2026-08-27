@@ -8,20 +8,43 @@ data class VoiceIntent(
 )
 
 class VoiceCommandParser {
+    private val wakeWord = "flodex"
+
     fun parse(text: String): VoiceIntent {
-        val normalized = text.lowercase().replace("flodex", "").trim()
+        val lowered = text.lowercase().trim()
+        val hasWakeWord = lowered.contains(wakeWord)
+        val normalized = lowered.replace(wakeWord, "").trim()
+
+        if (!hasWakeWord && !normalized.contains("data") && !normalized.contains("kg")) {
+            return VoiceIntent(action = "wake_word_required")
+        }
+
         return when {
-            normalized.contains("aaj ka data") -> VoiceIntent(action = "summary", period = "daily")
-            normalized.contains("hafta") -> VoiceIntent(action = "summary", period = "weekly")
-            normalized.contains("mahina") -> VoiceIntent(action = "summary", period = "monthly")
+            normalized.contains("aaj ka data") || normalized.contains("today") ->
+                VoiceIntent(action = "summary", period = "daily")
+
+            normalized.contains("hafta") || normalized.contains("week") ->
+                VoiceIntent(action = "summary", period = "weekly")
+
+            normalized.contains("mahina") || normalized.contains("month") ->
+                VoiceIntent(action = "summary", period = "monthly")
+
+            normalized.contains("all data") || normalized.contains("poora data") ->
+                VoiceIntent(action = "summary", period = "all")
+
+            normalized.contains("unpaid") || normalized.contains("loan") || normalized.contains("qarz") ->
+                VoiceIntent(action = "unpaid_report")
+
             normalized.contains("data nikalo") -> {
                 val name = normalized.substringBefore("ka data nikalo").trim()
                 VoiceIntent(action = "find_customer", customerQuery = name)
             }
-            normalized.contains("kg") -> {
+
+            normalized.contains("kg") || normalized.contains("add") -> {
                 val number = Regex("(\\d+(?:\\.\\d+)?)").find(normalized)?.value?.toDoubleOrNull()
                 VoiceIntent(action = "add_transaction", weight = number)
             }
+
             else -> VoiceIntent(action = "unknown")
         }
     }

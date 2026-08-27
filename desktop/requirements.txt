@@ -2,3 +2,7 @@ openpyxl>=3.1.0
 SpeechRecognition>=3.10.0
 pyttsx3>=2.90
 reportlab>=4.2.0
+# Optional for microphone input
+PyAudio>=0.2.14
+# Optional for face detection helper
+opencv-python>=4.10.0

@@ -2,7 +2,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 
 @dataclass
@@ -35,6 +35,7 @@ class FlodexDatabase:
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
     def _init_db(self) -> None:
@@ -72,15 +73,17 @@ class FlodexDatabase:
     def add_or_get_customer(self, name: str, phone: str, address: str = "", photo_path: Optional[str] = None) -> Customer:
         now = datetime.now().isoformat(timespec="seconds")
         with self._connect() as conn:
-            row = conn.execute("SELECT * FROM customers WHERE phone = ?", (phone,)).fetchone()
+            row = conn.execute("SELECT * FROM customers WHERE phone = ?", (phone.strip(),)).fetchone()
             if row:
+                if photo_path and not row["photo_path"]:
+                    conn.execute("UPDATE customers SET photo_path = ? WHERE id = ?", (photo_path, row["id"]))
+                    row = conn.execute("SELECT * FROM customers WHERE id = ?", (row["id"],)).fetchone()
                 return Customer(**row)
             cursor = conn.execute(
                 "INSERT INTO customers(name, phone, address, photo_path, created_at) VALUES(?,?,?,?,?)",
                 (name.strip(), phone.strip(), address.strip(), photo_path, now),
             )
-            customer_id = cursor.lastrowid
-            created = conn.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
+            created = conn.execute("SELECT * FROM customers WHERE id = ?", (cursor.lastrowid,)).fetchone()
             return Customer(**created)
 
     def update_customer(self, customer_id: int, name: str, phone: str, address: str, photo_path: Optional[str]) -> None:
@@ -129,6 +132,10 @@ class FlodexDatabase:
             row = conn.execute("SELECT * FROM transactions WHERE id = ?", (cursor.lastrowid,)).fetchone()
         return Transaction(**row)
 
+    def mark_transaction_paid(self, transaction_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("UPDATE transactions SET payment_status='PAID' WHERE id = ?", (transaction_id,))
+
     def list_customer_transactions(self, customer_id: int) -> List[Transaction]:
         with self._connect() as conn:
             rows = conn.execute(
@@ -136,6 +143,11 @@ class FlodexDatabase:
                 (customer_id,),
             ).fetchall()
         return [Transaction(**row) for row in rows]
+
+    def get_transaction(self, transaction_id: int) -> Optional[Transaction]:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM transactions WHERE id = ?", (transaction_id,)).fetchone()
+        return Transaction(**row) if row else None
 
     def list_transactions_by_range(self, start_date: str, end_date: str) -> List[sqlite3.Row]:
         with self._connect() as conn:
@@ -182,13 +194,18 @@ class FlodexDatabase:
 
     def monthly_summary(self, year: int, month: int) -> Dict[str, float]:
         start = date(year, month, 1)
-        if month == 12:
-            next_month = date(year + 1, 1, 1)
-        else:
-            next_month = date(year, month + 1, 1)
-        end = next_month - timedelta(days=1)
+        end = (date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)) - timedelta(days=1)
         summary = self._aggregate(start.isoformat(), end.isoformat())
         summary["label"] = f"Monthly Summary ({start.strftime('%B %Y')})"
+        return summary
+
+    def all_time_summary(self) -> Dict[str, float]:
+        with self._connect() as conn:
+            minmax = conn.execute("SELECT MIN(txn_date) as start_date, MAX(txn_date) as end_date FROM transactions").fetchone()
+        if not minmax["start_date"]:
+            return {"label": "All Time Summary", "total_wheat": 0.0, "total_flour": 0.0, "total_amount": 0.0, "unpaid_amount": 0.0, "total_transactions": 0}
+        summary = self._aggregate(minmax["start_date"], minmax["end_date"])
+        summary["label"] = "All Time Summary"
         return summary
 
     def loan_report(self) -> List[sqlite3.Row]:
@@ -197,7 +214,8 @@ class FlodexDatabase:
                 """
                 SELECT c.id, c.name, c.phone,
                        COALESCE(SUM(CASE WHEN t.payment_status = 'UNPAID' THEN t.amount ELSE 0 END), 0) as unpaid_total,
-                       COUNT(CASE WHEN t.payment_status = 'UNPAID' THEN 1 END) as unpaid_transactions
+                       COUNT(CASE WHEN t.payment_status = 'UNPAID' THEN 1 END) as unpaid_transactions,
+                       MIN(CASE WHEN t.payment_status = 'UNPAID' THEN t.txn_date END) as oldest_unpaid_date
                 FROM customers c
                 LEFT JOIN transactions t ON c.id = t.customer_id
                 GROUP BY c.id, c.name, c.phone
@@ -205,3 +223,17 @@ class FlodexDatabase:
                 ORDER BY unpaid_total DESC
                 """
             ).fetchall()
+
+    def due_reminders(self, days_due: int = 7) -> List[Tuple[str, str]]:
+        reminders: List[Tuple[str, str]] = []
+        threshold = (date.today() - timedelta(days=days_due)).isoformat()
+        for row in self.loan_report():
+            oldest = row["oldest_unpaid_date"]
+            if oldest and oldest <= threshold:
+                reminders.append(
+                    (
+                        row["name"],
+                        f"{row['name']} ({row['phone']}) unpaid {row['unpaid_total']:.2f} since {oldest}",
+                    )
+                )
+        return reminders

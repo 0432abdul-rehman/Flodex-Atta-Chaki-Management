@@ -12,6 +12,9 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE customerId = :customerId ORDER BY txnDate DESC, id DESC")
     suspend fun listByCustomer(customerId: Int): List<TransactionEntity>
 
+    @Query("UPDATE transactions SET paymentStatus='PAID' WHERE id = :transactionId")
+    suspend fun markPaid(transactionId: Int)
+
     @Query(
         """
         SELECT COALESCE(SUM(wheatWeight),0) FROM transactions
@@ -22,9 +25,25 @@ interface TransactionDao {
 
     @Query(
         """
+        SELECT COALESCE(SUM(flourWeight),0) FROM transactions
+        WHERE txnDate BETWEEN :startDate AND :endDate
+        """
+    )
+    suspend fun totalFlour(startDate: String, endDate: String): Double
+
+    @Query(
+        """
         SELECT COALESCE(SUM(amount),0) FROM transactions
         WHERE txnDate BETWEEN :startDate AND :endDate
         """
     )
     suspend fun totalAmount(startDate: String, endDate: String): Double
+
+    @Query(
+        """
+        SELECT COALESCE(SUM(amount),0) FROM transactions
+        WHERE paymentStatus='UNPAID'
+        """
+    )
+    suspend fun totalUnpaid(): Double
 }

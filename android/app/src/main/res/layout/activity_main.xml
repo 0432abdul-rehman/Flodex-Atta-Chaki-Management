@@ -1,53 +1,116 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp">
+    android:layout_height="match_parent">
 
-    <EditText
-        android:id="@+id/nameInput"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Customer Name" />
+        android:orientation="vertical"
+        android:padding="16dp">
 
-    <EditText
-        android:id="@+id/phoneInput"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Phone" />
+        <EditText
+            android:id="@+id/nameInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Customer Name" />
 
-    <EditText
-        android:id="@+id/addressInput"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Address" />
+        <EditText
+            android:id="@+id/phoneInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Phone" />
 
-    <Button
-        android:id="@+id/saveCustomerBtn"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Save / Reuse Customer" />
+        <EditText
+            android:id="@+id/addressInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Address" />
 
-    <EditText
-        android:id="@+id/voiceInput"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Flodex command" />
+        <Button
+            android:id="@+id/saveCustomerBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Save / Reuse Customer" />
 
-    <Button
-        android:id="@+id/runVoiceBtn"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Run Command" />
+        <EditText
+            android:id="@+id/wheatInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Wheat KG"
+            android:inputType="numberDecimal" />
 
-    <TextView
-        android:id="@+id/outputText"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:paddingTop="12dp"
-        android:text="Flodex ready"
-        android:textSize="14sp" />
+        <EditText
+            android:id="@+id/flourInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Flour KG"
+            android:inputType="numberDecimal" />
 
-</LinearLayout>
+        <EditText
+            android:id="@+id/amountInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Amount"
+            android:inputType="numberDecimal" />
+
+        <Spinner
+            android:id="@+id/paymentSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <Button
+            android:id="@+id/addTransactionBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Add Transaction" />
+
+        <EditText
+            android:id="@+id/voiceInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Flodex command" />
+
+        <Button
+            android:id="@+id/runVoiceBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Run Voice Command" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/dailySummaryBtn"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Today" />
+
+            <Button
+                android:id="@+id/weeklySummaryBtn"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Week" />
+
+            <Button
+                android:id="@+id/monthlySummaryBtn"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Month" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/outputText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="12dp"
+            android:text="Flodex ready"
+            android:textSize="14sp" />
+
+    </LinearLayout>
+</ScrollView>

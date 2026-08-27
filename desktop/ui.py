@@ -2,26 +2,35 @@ import tkinter as tk
 from datetime import date
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+from typing import List
 
 try:
     from .database import FlodexDatabase
-    from .reports import export_transactions_excel, save_receipt
-    from .voice_handler import VoiceCommandParser
+    from .face_helper import FaceMatcher
+    from .reports import export_transactions_excel, print_receipt_file, save_receipt, save_receipt_pdf
+    from .voice_handler import VoiceCommandParser, VoiceEngine
 except ImportError:  # direct script execution support
     from database import FlodexDatabase
-    from reports import export_transactions_excel, save_receipt
-    from voice_handler import VoiceCommandParser
+    from face_helper import FaceMatcher
+    from reports import export_transactions_excel, print_receipt_file, save_receipt, save_receipt_pdf
+    from voice_handler import VoiceCommandParser, VoiceEngine
 
 
 class FlodexApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("Flodex - Atta Chaki Management")
-        self.geometry("1050x700")
+        self.geometry("1150x760")
         self.db = FlodexDatabase()
         self.parser = VoiceCommandParser()
+        self.voice_engine = VoiceEngine()
+        self.face_matcher = FaceMatcher()
+
         self.selected_customer_id = None
         self.bg_color = "#f5f5f5"
+        self.bg_image = None
+        self.bg_image_label = None
+        self.last_receipt_path = None
 
         self.configure(bg=self.bg_color)
         self._build_ui()
@@ -67,15 +76,23 @@ class FlodexApp(tk.Tk):
         ttk.Button(form, text="Browse Photo", command=self.pick_photo).grid(row=3, column=2, padx=5, pady=5)
         ttk.Button(form, text="Save / Reuse Customer", command=self.save_customer).grid(row=4, column=0, padx=5, pady=10)
 
+        face_frame = ttk.Frame(form)
+        face_frame.grid(row=4, column=1, columnspan=2, sticky="w")
+        ttk.Button(face_frame, text="Match Customer by Face Photo", command=self.match_customer_by_face).pack(side="left", padx=6)
+        ttk.Label(
+            face_frame,
+            text="(Optional: requires OpenCV; matches by detected face + photo naming)",
+        ).pack(side="left")
+
         self.customers_tree = ttk.Treeview(
             self.customer_tab,
-            columns=("id", "name", "phone", "address"),
+            columns=("id", "name", "phone", "address", "photo"),
             show="headings",
             height=12,
         )
-        for col in ("id", "name", "phone", "address"):
+        for col in ("id", "name", "phone", "address", "photo"):
             self.customers_tree.heading(col, text=col.capitalize())
-            self.customers_tree.column(col, width=200 if col != "id" else 80)
+            self.customers_tree.column(col, width=180 if col != "id" else 70)
         self.customers_tree.pack(fill="both", expand=True, padx=10, pady=10)
         self.customers_tree.bind("<<TreeviewSelect>>", self.on_customer_select)
 
@@ -100,33 +117,56 @@ class FlodexApp(tk.Tk):
         )
 
         ttk.Button(form, text="Add Transaction", command=self.add_transaction).grid(row=5, column=0, padx=5, pady=10)
+        ttk.Button(form, text="Mark Selected Paid", command=self.mark_selected_paid).grid(row=5, column=1, padx=5, pady=10)
 
         self.txn_tree = ttk.Treeview(
             self.transaction_tab,
-            columns=("date", "wheat", "flour", "amount", "status", "notes"),
+            columns=("id", "date", "wheat", "flour", "amount", "status", "notes"),
             show="headings",
             height=14,
         )
-        for col in ("date", "wheat", "flour", "amount", "status", "notes"):
+        for col, width in (("id", 70), ("date", 120), ("wheat", 110), ("flour", 110), ("amount", 110), ("status", 90), ("notes", 350)):
             self.txn_tree.heading(col, text=col.capitalize())
-            self.txn_tree.column(col, width=150)
+            self.txn_tree.column(col, width=width)
         self.txn_tree.pack(fill="both", expand=True, padx=10, pady=10)
 
         btn_frame = ttk.Frame(self.transaction_tab)
         btn_frame.pack(fill="x", padx=10, pady=4)
         ttk.Button(btn_frame, text="Export This Month (Excel)", command=self.export_monthly).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="Generate Selected Receipt", command=self.generate_receipt).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Generate TXT Receipt", command=self.generate_receipt).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Generate PDF Receipt", command=self.generate_pdf_receipt).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Print Last Receipt", command=self.print_last_receipt).pack(side="left", padx=5)
 
     def _build_analytics_tab(self) -> None:
-        self.analytics_text = tk.Text(self.analytics_tab, height=22)
-        self.analytics_text.pack(fill="both", expand=True, padx=10, pady=10)
+        top = ttk.Frame(self.analytics_tab)
+        top.pack(fill="x", padx=10, pady=6)
+        ttk.Label(top, text="Custom query").pack(side="left")
+        self.query_var = tk.StringVar()
+        ttk.Entry(top, textvariable=self.query_var).pack(side="left", fill="x", expand=True, padx=8)
+        ttk.Button(top, text="Run Query", command=self.run_custom_query).pack(side="left")
+
+        self.analytics_text = tk.Text(self.analytics_tab, height=17)
+        self.analytics_text.pack(fill="both", expand=True, padx=10, pady=8)
+
+        ttk.Label(self.analytics_tab, text="Due Payment Reminders").pack(anchor="w", padx=10)
+        self.reminders_box = tk.Listbox(self.analytics_tab, height=6)
+        self.reminders_box.pack(fill="x", padx=10, pady=6)
         ttk.Button(self.analytics_tab, text="Refresh Reports", command=self.refresh_analytics).pack(pady=5)
 
     def _build_voice_tab(self) -> None:
         ttk.Label(self.voice_tab, text="Type voice command (Urdu/Punjabi/English)").pack(anchor="w", padx=10, pady=5)
         self.voice_text = tk.Text(self.voice_tab, height=4)
         self.voice_text.pack(fill="x", padx=10)
-        ttk.Button(self.voice_tab, text="Run Flodex Command", command=self.run_voice_command).pack(padx=10, pady=8, anchor="w")
+
+        actions = ttk.Frame(self.voice_tab)
+        actions.pack(fill="x", padx=10, pady=8)
+        ttk.Button(actions, text="Run Flodex Command", command=self.run_voice_command).pack(side="left", padx=4)
+        ttk.Button(actions, text="Listen from Microphone", command=self.listen_from_microphone).pack(side="left", padx=4)
+        self.speak_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(actions, text="Speak responses", variable=self.speak_var).pack(side="left", padx=10)
+
+        support_text = "Microphone ready" if self.voice_engine.supported else "Microphone module unavailable (install SpeechRecognition + PyAudio)"
+        ttk.Label(self.voice_tab, text=support_text).pack(anchor="w", padx=10)
 
         self.voice_output = tk.Text(self.voice_tab, height=20)
         self.voice_output.pack(fill="both", expand=True, padx=10, pady=10)
@@ -137,6 +177,12 @@ class FlodexApp(tk.Tk):
         ttk.Entry(self.settings_tab, textvariable=self.color_var).pack(fill="x", padx=10)
         ttk.Button(self.settings_tab, text="Apply Color", command=self.apply_theme).pack(anchor="w", padx=10, pady=8)
 
+        ttk.Label(self.settings_tab, text="Background Image (optional .png/.gif)").pack(anchor="w", padx=10)
+        self.bg_path_var = tk.StringVar()
+        ttk.Entry(self.settings_tab, textvariable=self.bg_path_var).pack(fill="x", padx=10, pady=4)
+        ttk.Button(self.settings_tab, text="Browse Image", command=self.pick_background_image).pack(anchor="w", padx=10)
+        ttk.Button(self.settings_tab, text="Apply Image", command=self.apply_background_image).pack(anchor="w", padx=10, pady=4)
+
     def _labeled_entry(self, parent: ttk.LabelFrame, text: str, variable: tk.StringVar, row: int) -> None:
         ttk.Label(parent, text=text).grid(row=row, column=0, sticky="w", padx=5, pady=5)
         ttk.Entry(parent, textvariable=variable).grid(row=row, column=1, sticky="ew", padx=5, pady=5)
@@ -146,6 +192,11 @@ class FlodexApp(tk.Tk):
         path = filedialog.askopenfilename(title="Select customer photo")
         if path:
             self.photo_var.set(path)
+
+    def pick_background_image(self) -> None:
+        path = filedialog.askopenfilename(title="Select background image", filetypes=[("Images", "*.png *.gif")])
+        if path:
+            self.bg_path_var.set(path)
 
     def save_customer(self) -> None:
         if not self.name_var.get().strip() or not self.phone_var.get().strip():
@@ -163,7 +214,7 @@ class FlodexApp(tk.Tk):
         for row in self.customers_tree.get_children():
             self.customers_tree.delete(row)
         for c in self.db.list_customers():
-            self.customers_tree.insert("", "end", values=(c.id, c.name, c.phone, c.address))
+            self.customers_tree.insert("", "end", values=(c.id, c.name, c.phone, c.address, c.photo_path or ""))
 
     def on_customer_select(self, _event=None) -> None:
         selected = self.customers_tree.selection()
@@ -175,6 +226,7 @@ class FlodexApp(tk.Tk):
         self.name_var.set(vals[1])
         self.phone_var.set(vals[2])
         self.address_var.set(vals[3])
+        self.photo_var.set(vals[4])
         self.load_customer_transactions(customer_id)
 
     def load_customer_transactions(self, customer_id: int) -> None:
@@ -184,7 +236,7 @@ class FlodexApp(tk.Tk):
             self.txn_tree.insert(
                 "",
                 "end",
-                values=(txn.txn_date, txn.wheat_weight, txn.flour_weight, txn.amount, txn.payment_status, txn.notes),
+                values=(txn.id, txn.txn_date, txn.wheat_weight, txn.flour_weight, txn.amount, txn.payment_status, txn.notes),
             )
 
     def add_transaction(self) -> None:
@@ -208,11 +260,23 @@ class FlodexApp(tk.Tk):
         self.refresh_analytics()
         messagebox.showinfo("Recorded", f"Transaction #{txn.id} saved")
 
+    def mark_selected_paid(self) -> None:
+        selected = self.txn_tree.selection()
+        if not selected:
+            messagebox.showerror("Select", "Select transaction first")
+            return
+        txn_id = int(self.txn_tree.item(selected[0], "values")[0])
+        self.db.mark_transaction_paid(txn_id)
+        if self.selected_customer_id:
+            self.load_customer_transactions(self.selected_customer_id)
+        self.refresh_analytics()
+
     def refresh_analytics(self) -> None:
         today = date.today().isoformat()
         daily = self.db.daily_summary(today)
         weekly = self.db.weekly_summary()
         monthly = self.db.monthly_summary(date.today().year, date.today().month)
+        overall = self.db.all_time_summary()
         loans = self.db.loan_report()
 
         lines = [
@@ -225,6 +289,9 @@ class FlodexApp(tk.Tk):
             monthly["label"],
             f"Wheat: {monthly['total_wheat']:.2f} KG | Flour: {monthly['total_flour']:.2f} KG | Amount: {monthly['total_amount']:.2f}",
             "",
+            overall["label"],
+            f"Wheat: {overall['total_wheat']:.2f} KG | Flour: {overall['total_flour']:.2f} KG | Amount: {overall['total_amount']:.2f}",
+            "",
             "Loan / Unpaid Customers:",
         ]
 
@@ -236,43 +303,134 @@ class FlodexApp(tk.Tk):
         self.analytics_text.delete("1.0", "end")
         self.analytics_text.insert("1.0", "\n".join(lines))
 
+        self.reminders_box.delete(0, "end")
+        reminders = self.db.due_reminders(days_due=7)
+        if reminders:
+            for _, text in reminders:
+                self.reminders_box.insert("end", text)
+        else:
+            self.reminders_box.insert("end", "No due reminders")
+
+    def run_custom_query(self) -> None:
+        query = self.query_var.get().strip()
+        if not query:
+            return
+
+        result_lines = self.resolve_natural_query(query)
+        self.analytics_text.insert("end", "\n\n[Custom Query]\n" + "\n".join(result_lines) + "\n")
+
+    def resolve_natural_query(self, query: str) -> List[str]:
+        q = query.lower()
+
+        if any(w in q for w in ["today", "aaj"]):
+            s = self.db.daily_summary()
+            return [f"Today wheat {s['total_wheat']:.2f} KG, flour {s['total_flour']:.2f} KG, amount {s['total_amount']:.2f}"]
+
+        if any(w in q for w in ["week", "hafta"]):
+            s = self.db.weekly_summary()
+            return [f"Week wheat {s['total_wheat']:.2f} KG, flour {s['total_flour']:.2f} KG, amount {s['total_amount']:.2f}"]
+
+        if any(w in q for w in ["month", "mahina"]):
+            s = self.db.monthly_summary(date.today().year, date.today().month)
+            return [f"Month wheat {s['total_wheat']:.2f} KG, flour {s['total_flour']:.2f} KG, amount {s['total_amount']:.2f}"]
+
+        if any(w in q for w in ["unpaid", "loan", "qarz", "udhaar"]):
+            rows = self.db.loan_report()
+            return [f"{r['name']}: {r['unpaid_total']:.2f}" for r in rows] or ["No unpaid balances"]
+
+        customer = self.db.find_customer(query)
+        if customer:
+            txns = self.db.list_customer_transactions(customer.id)
+            total_unpaid = sum(t.amount for t in txns if t.payment_status == "UNPAID")
+            return [
+                f"Customer: {customer.name} ({customer.phone})",
+                f"Total visits: {len(txns)}",
+                f"Total unpaid: {total_unpaid:.2f}",
+            ]
+
+        overall = self.db.all_time_summary()
+        return [
+            "General result:",
+            f"Total wheat: {overall['total_wheat']:.2f} KG",
+            f"Total amount: {overall['total_amount']:.2f}",
+        ]
+
+    def listen_from_microphone(self) -> None:
+        text = self.voice_engine.listen_once()
+        if not text:
+            messagebox.showwarning("Voice", "Could not capture voice command")
+            return
+        self.voice_text.delete("1.0", "end")
+        self.voice_text.insert("1.0", text)
+        self.run_voice_command()
+
     def run_voice_command(self) -> None:
         command = self.voice_text.get("1.0", "end").strip()
         if not command:
             return
 
         intent = self.parser.parse(command)
-        if intent.action == "find_customer" and intent.customer_query:
+        response = ""
+
+        if intent.action == "wake_word_required":
+            response = "Please say: Flodex ..."
+        elif intent.action == "find_customer" and intent.customer_query:
             customer = self.db.find_customer(intent.customer_query)
             if customer:
-                self.voice_output.insert("end", f"✔ {customer.name} found.\n")
+                response = f"✔ {customer.name} found."
                 self.selected_customer_id = customer.id
                 self.load_customer_transactions(customer.id)
             else:
-                self.voice_output.insert("end", f"✘ {intent.customer_query} not found.\n")
+                response = f"✘ {intent.customer_query} not found."
+        elif intent.action == "customer_history" and intent.customer_query:
+            customer = self.db.find_customer(intent.customer_query)
+            if customer:
+                txns = self.db.list_customer_transactions(customer.id)
+                response = f"{customer.name} history: {len(txns)} transactions."
+                self.selected_customer_id = customer.id
+                self.load_customer_transactions(customer.id)
+            else:
+                response = f"No history found for {intent.customer_query}."
         elif intent.action == "add_transaction":
             if intent.weight:
                 self.wheat_var.set(str(intent.weight))
-                self.voice_output.insert("end", f"Weight captured: {intent.weight} KG. Complete remaining fields manually.\n")
+                self.flour_var.set(str(round(intent.weight * 0.9, 2)))
+                response = f"Weight captured: {intent.weight} KG."
+            else:
+                response = "Weight not detected."
             if intent.customer_query:
                 customer = self.db.find_customer(intent.customer_query)
                 if customer:
                     self.selected_customer_id = customer.id
                     self.load_customer_transactions(customer.id)
-                    self.voice_output.insert("end", f"Customer loaded: {customer.name}.\n")
+                    response += f" Customer loaded: {customer.name}."
         elif intent.action == "summary":
             if intent.period == "daily":
                 summary = self.db.daily_summary()
             elif intent.period == "weekly":
                 summary = self.db.weekly_summary()
-            else:
+            elif intent.period == "monthly":
                 summary = self.db.monthly_summary(date.today().year, date.today().month)
-            self.voice_output.insert(
-                "end",
-                f"{summary['label']}: Wheat {summary['total_wheat']:.2f}, Flour {summary['total_flour']:.2f}, Amount {summary['total_amount']:.2f}\n",
+            else:
+                summary = self.db.all_time_summary()
+            response = (
+                f"{summary['label']}: Wheat {summary['total_wheat']:.2f} KG, "
+                f"Flour {summary['total_flour']:.2f} KG, Amount {summary['total_amount']:.2f}"
             )
+        elif intent.action == "unpaid_report":
+            loans = self.db.loan_report()
+            if not loans:
+                response = "No unpaid balances."
+            else:
+                top = loans[0]
+                response = f"Unpaid customers: {len(loans)}. Highest due {top['name']} = {top['unpaid_total']:.2f}"
         else:
-            self.voice_output.insert("end", "Command not understood. Try manual entry.\n")
+            result = self.resolve_natural_query(intent.raw_query or command)
+            response = " ".join(result)
+
+        self.voice_output.insert("end", response + "\n")
+        if self.speak_var.get():
+            self.voice_engine.speak(response)
 
     def export_monthly(self) -> None:
         today = date.today()
@@ -285,22 +443,69 @@ class FlodexApp(tk.Tk):
         path = export_transactions_excel(rows, output)
         messagebox.showinfo("Exported", f"Report saved at {path}")
 
-    def generate_receipt(self) -> None:
+    def _selected_transaction(self):
         selected = self.txn_tree.selection()
-        if not selected or not self.selected_customer_id:
+        if not selected:
+            return None
+        txn_id = int(self.txn_tree.item(selected[0], "values")[0])
+        return self.db.get_transaction(txn_id)
+
+    def generate_receipt(self) -> None:
+        txn = self._selected_transaction()
+        if not txn:
             messagebox.showerror("Select transaction", "Select a transaction first")
             return
-
-        row_values = self.txn_tree.item(selected[0], "values")
-        txns = self.db.list_customer_transactions(self.selected_customer_id)
-        txn = next((t for t in txns if str(t.txn_date) == str(row_values[0]) and str(t.amount) == str(row_values[3])), None)
         customer_name = self.name_var.get() or "Customer"
+        receipt_path = save_receipt(customer_name, txn.__dict__)
+        self.last_receipt_path = receipt_path
+        messagebox.showinfo("Receipt", f"Receipt generated: {Path(receipt_path).resolve()}")
+
+    def generate_pdf_receipt(self) -> None:
+        txn = self._selected_transaction()
         if not txn:
-            messagebox.showerror("Not found", "Could not find matching transaction")
+            messagebox.showerror("Select transaction", "Select a transaction first")
+            return
+        customer_name = self.name_var.get() or "Customer"
+        receipt_path = save_receipt_pdf(customer_name, txn.__dict__)
+        self.last_receipt_path = receipt_path
+        messagebox.showinfo("Receipt", f"Receipt generated: {Path(receipt_path).resolve()}")
+
+    def print_last_receipt(self) -> None:
+        if not self.last_receipt_path:
+            messagebox.showerror("No receipt", "Generate a receipt first")
+            return
+        ok, message = print_receipt_file(self.last_receipt_path)
+        if ok:
+            messagebox.showinfo("Print", message)
+        else:
+            messagebox.showerror("Print", message)
+
+    def match_customer_by_face(self) -> None:
+        image_path = filedialog.askopenfilename(title="Select camera photo", filetypes=[("Images", "*.png *.jpg *.jpeg")])
+        if not image_path:
             return
 
-        receipt_path = save_receipt(customer_name, txn.__dict__)
-        messagebox.showinfo("Receipt", f"Receipt generated: {Path(receipt_path).resolve()}")
+        if not self.face_matcher.supported:
+            messagebox.showwarning("Face", "OpenCV not installed. Install opencv-python for face detection.")
+            return
+
+        customers = self.db.list_customers()
+        known_photos = [c.photo_path for c in customers if c.photo_path]
+        matched_photo = self.face_matcher.guess_match(image_path, known_photos)
+        if not matched_photo:
+            messagebox.showinfo("Face", "No matching customer photo found.")
+            return
+
+        for customer in customers:
+            if customer.photo_path == matched_photo:
+                self.selected_customer_id = customer.id
+                self.name_var.set(customer.name)
+                self.phone_var.set(customer.phone)
+                self.address_var.set(customer.address)
+                self.photo_var.set(customer.photo_path or "")
+                self.load_customer_transactions(customer.id)
+                messagebox.showinfo("Face", f"Matched customer: {customer.name}")
+                return
 
     def apply_theme(self) -> None:
         new_color = self.color_var.get().strip()
@@ -309,6 +514,24 @@ class FlodexApp(tk.Tk):
             return
         self.bg_color = new_color
         self.configure(bg=new_color)
+
+    def apply_background_image(self) -> None:
+        image_path = self.bg_path_var.get().strip()
+        if not image_path:
+            return
+        try:
+            self.bg_image = tk.PhotoImage(file=image_path)
+        except Exception:
+            messagebox.showerror("Invalid image", "Only Tk-compatible images (.png/.gif) are supported.")
+            return
+
+        if self.bg_image_label is None:
+            self.bg_image_label = tk.Label(self, image=self.bg_image)
+            self.bg_image_label.place(x=0, y=0, relwidth=1, relheight=1)
+            self.bg_image_label.lower()
+        else:
+            self.bg_image_label.configure(image=self.bg_image)
+        messagebox.showinfo("Background", "Background image applied")
 
 
 if __name__ == "__main__":

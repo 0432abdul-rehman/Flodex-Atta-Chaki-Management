@@ -22,6 +22,14 @@ class TestVoiceParser(unittest.TestCase):
         self.assertEqual(intent.action, "summary")
         self.assertEqual(intent.period, "daily")
 
+    def test_wake_word_required(self):
+        intent = self.parser.parse("Ali Hassan ko add karo")
+        self.assertEqual(intent.action, "wake_word_required")
+
+    def test_unpaid_command(self):
+        intent = self.parser.parse("Flodex unpaid report de")
+        self.assertEqual(intent.action, "unpaid_report")
+
 
 if __name__ == "__main__":
     unittest.main()

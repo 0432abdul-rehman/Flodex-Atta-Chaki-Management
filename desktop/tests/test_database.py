@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from datetime import date, timedelta
 
 from desktop.database import FlodexDatabase
 
@@ -26,15 +27,26 @@ class TestFlodexDatabase(unittest.TestCase):
         self.assertEqual(summary["total_transactions"], 1)
         self.assertEqual(summary["unpaid_amount"], 500.0)
 
-    def test_loan_report(self):
+    def test_loan_report_and_reminders(self):
         c1 = self.db.add_or_get_customer("A", "1", "")
         c2 = self.db.add_or_get_customer("B", "2", "")
-        self.db.add_transaction(c1.id, 10, 8, 100, "UNPAID")
+        old_day = (date.today() - timedelta(days=12)).isoformat()
+        self.db.add_transaction(c1.id, 10, 8, 100, "UNPAID", txn_date=old_day)
         self.db.add_transaction(c2.id, 10, 8, 100, "PAID")
 
         loans = self.db.loan_report()
         self.assertEqual(len(loans), 1)
         self.assertEqual(loans[0]["name"], "A")
+
+        reminders = self.db.due_reminders(days_due=7)
+        self.assertEqual(len(reminders), 1)
+
+    def test_mark_paid(self):
+        c1 = self.db.add_or_get_customer("A", "11", "")
+        txn = self.db.add_transaction(c1.id, 10, 8, 100, "UNPAID")
+        self.db.mark_transaction_paid(txn.id)
+        fetched = self.db.get_transaction(txn.id)
+        self.assertEqual(fetched.payment_status, "PAID")
 
 
 if __name__ == "__main__":
