@@ -19,18 +19,20 @@ Flodex-Atta-Chaki-Management/
 └── README.md
 ```
 
+## Delivered Features
+
+- One-time customer profile storage and customer reuse
+- Per-visit transaction records (wheat, flour, amount, payment status)
+- Manual entry + voice command flow with wake-word style parsing (`Flodex ...`)
+- Daily/weekly/monthly/all-time reports
+- Loan/unpaid tracking and due reminders
+- Receipt generation (TXT + PDF) and receipt print trigger
+- Excel export (CSV fallback)
+- Theme color + background image support
+- Optional face-photo matching helper (OpenCV)
+- 100% local SQLite storage for both platforms
+
 ## Quick Start
 
 - Desktop: see `docs/INSTALLATION.md`
 - Android: open `android/` in Android Studio and run on emulator/device
-
-## Core Business Support
-
-- One-time customer profile storage (name/phone/address/photo path)
-- Repeat visit transaction logging (wheat, flour, date, payment status)
-- Voice command parsing for Urdu/Punjabi-style commands
-- Daily/weekly/monthly summaries
-- Unpaid loan tracking and report views
-- Excel export + receipt generation
-- Theme customization with background color
-- 100% local SQLite storage (no internet required)

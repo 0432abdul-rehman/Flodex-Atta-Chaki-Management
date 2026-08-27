@@ -1,26 +1,36 @@
 # Flodex Features Matrix
 
-## Implemented in Desktop App
+## Desktop App
 
-- Customer profile CRUD basics with one-time save/reuse by phone
+- Customer profile save/reuse (name, phone, address, photo path)
 - Transaction recording per visit (date, wheat, flour, amount, payment status)
-- Paid/Unpaid tracking and loan report
-- Voice command parser for Urdu/Punjabi-style commands and natural inputs
-- Daily/weekly/monthly analytics summaries
-- Excel export (fallback CSV if openpyxl unavailable)
-- Receipt file generation
-- Manual data entry UI
-- Theme customization (background color)
+- Payment lifecycle support (`UNPAID` to `PAID` updates)
+- Loan calculator/report and due payment reminders
+- Voice wake-word command parser (`Flodex`)
+- Voice command execution for:
+  - customer lookup
+  - transaction weight capture
+  - daily/weekly/monthly/all summaries
+  - unpaid report
+  - customer history and natural query fallback
+- Microphone command capture + text-to-speech (dependency-based)
+- Monthly export to Excel (CSV fallback)
+- Receipt generation in TXT and PDF + print trigger
+- Manual data entry interface
+- Theme customization (color + optional image)
+- Optional OpenCV-based face-photo detection and matching helper
 - Local SQLite database
 
-## Implemented in Android App (MVP Scaffold)
+## Android App
 
 - Kotlin Android project with Room ORM
 - Customer add/reuse by phone
-- Transaction insertion and daily summary
-- Voice command parser integration in main screen
+- Transaction insertion with wheat/flour/amount/payment
+- Daily/weekly/monthly/all summary actions
+- Voice command parser integration on main screen
+- Unpaid summary response command
 - Offline local database storage
-- Required permissions for audio/camera groundwork
+- Permissions groundwork for audio/camera
 
 ## Database Schema
 

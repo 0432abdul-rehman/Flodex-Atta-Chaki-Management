@@ -2,39 +2,51 @@
 
 ## Customer Management
 
-1. Go to **Customers** tab.
-2. Enter Name, Phone, Address, Photo path.
-3. Click **Save / Reuse Customer**.
-4. For existing phone numbers, customer profile is reused automatically.
+1. Go to **Customers** tab (Desktop) or main screen fields (Android).
+2. Enter Name, Phone, Address, and optional Photo path.
+3. Save customer. Existing phone numbers automatically reuse customer profile.
 
 ## Manual Transaction Entry
 
-1. Select a customer from customer list.
-2. Open **Transactions** tab.
-3. Enter wheat weight, flour weight, amount, and paid/unpaid status.
-4. Click **Add Transaction**.
+1. Select/save customer.
+2. Enter wheat, flour, amount, and payment status.
+3. Save transaction.
+4. If customer pays later, use **Mark Selected Paid** (Desktop).
 
-## Voice-Style Commands (Desktop text simulation)
+## Voice Commands
 
-Use **Flodex Voice** tab examples:
+Command examples:
 - `Flodex, Ali Hassan ka data nikalo`
 - `Flodex Ali ko 40 KG add karo`
 - `Flodex aaj ka data de`
 - `Flodex is hafta ka data de`
 - `Flodex is mahina ka data de`
+- `Flodex unpaid report de`
 
-## Reports and Analytics
+Desktop voice tab supports:
+- typed commands
+- microphone capture (if speech dependencies installed)
+- spoken responses (TTS)
 
-- Open **Reports** tab for daily, weekly, monthly summaries.
-- Loan report lists unpaid customers and totals.
+## Reports, Loans, and Daily Progress
 
-## Export and Receipts
+- Daily/weekly/monthly/all-time summaries shown in reports.
+- Loan report lists unpaid customers.
+- Due reminders highlight old unpaid balances.
+- Custom query box handles natural language queries (period and unpaid/customer questions).
 
-- Transactions tab:
-  - **Export This Month (Excel)**
-  - **Generate Selected Receipt**
+## Export, Receipts, and Print
+
+- Export current month to Excel.
+- Generate TXT or PDF receipt for selected transaction.
+- Print the last generated receipt from the app.
 
 ## Customization
 
-- Open **Customization** tab.
-- Set color code (e.g. `#e8f5e9`) and apply.
+- Apply custom color theme.
+- Apply custom background image (`.png/.gif` supported by Tkinter).
+
+## Face Matching (Optional)
+
+- In Customer tab choose **Match Customer by Face Photo**.
+- If OpenCV is available and a face is detected, Flodex attempts photo-path matching.

@@ -13,6 +13,12 @@
    python desktop/main.py
    ```
 
+### Optional Desktop Notes
+
+- `PyAudio` is needed for microphone capture through `SpeechRecognition`.
+- `opencv-python` enables optional face-photo detection/matching helper.
+- `reportlab` enables PDF receipts.
+
 ## Android App
 
 1. Install Android Studio (latest stable).
@@ -24,4 +30,4 @@
 ## Offline Operation
 
 - Both apps use local SQLite databases.
-- No internet is required after installation.
+- No internet is required for storage and reporting flows.
